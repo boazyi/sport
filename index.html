@@ -236,76 +236,85 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
-const USER_ID = 'boazyi'; // מזהה קבוע
-
-function saveToCloud(key, data) {
-  set(ref(db, USER_ID + '/' + key), data).catch(e => console.error('Save error:', e));
-}
-
-function loadFromCloud() {
-  return get(ref(db, USER_ID)).then(snapshot => snapshot.exists() ? snapshot.val() : null);
-}
+const UID = 'boazyi';
 
 const DEF_TYPES=[{id:'pool',label:'אימון בבריכה',cls:'pool'},{id:'strength',label:'אימון כח',cls:'strength'},{id:'cardio',label:'אימון אירובי',cls:'cardio'}];
-let types=JSON.parse(localStorage.getItem('sp_types')||'null')||DEF_TYPES;
-let exercises=JSON.parse(localStorage.getItem('sp_ex')||'[]');
-let history=JSON.parse(localStorage.getItem('sp_hist')||'[]');
-let selType=types[0]?.id;
+let types=[];
+let exercises=[];
+let history=[];
+let selType=null;
 let histFilter='all';
 let deferredPrompt=null;
+let initialized=false;
 
-function save(){
-  localStorage.setItem('sp_types',JSON.stringify(types));
-  localStorage.setItem('sp_ex',JSON.stringify(exercises));
-  localStorage.setItem('sp_hist',JSON.stringify(history));
-  saveToCloud('types', types);
-  saveToCloud('exercises', exercises);
-  saveToCloud('history', history);
+// ── Firebase helpers ──────────────────────────────────────
+function saveAll(){
+  set(ref(db, UID+'/types'), types);
+  set(ref(db, UID+'/exercises'), exercises);
+  set(ref(db, UID+'/history'), history);
 }
 
-// PWA Install
+// ── PWA Install ───────────────────────────────────────────
 window.addEventListener('beforeinstallprompt',e=>{
-  e.preventDefault();deferredPrompt=e;
+  e.preventDefault(); deferredPrompt=e;
   document.getElementById('install-banner').classList.add('show');
 });
-window.addEventListener('appinstalled',()=>{document.getElementById('install-banner').classList.remove('show');deferredPrompt=null;});
-
+window.addEventListener('appinstalled',()=>{
+  document.getElementById('install-banner').classList.remove('show');
+  deferredPrompt=null;
+});
 function installApp(){if(deferredPrompt){deferredPrompt.prompt();deferredPrompt.userChoice.then(()=>{deferredPrompt=null;document.getElementById('install-banner').classList.remove('show');});}}
 function dismissInstall(){document.getElementById('install-banner').classList.remove('show');}
+window.installApp=installApp;
+window.dismissInstall=dismissInstall;
 
+// ── Tabs ─────────────────────────────────────────────────
 function switchTab(tab){
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['exercises','history'][i]===tab));
   document.getElementById('panel-exercises').style.display=tab==='exercises'?'block':'none';
   document.getElementById('panel-history').style.display=tab==='history'?'block':'none';
   document.querySelector('.fab').style.display=tab==='exercises'?'block':'none';
-  if(tab==='history')renderHistory();
+  if(tab==='history') renderHistory();
 }
+window.switchTab=switchTab;
 
+// ── Helpers ───────────────────────────────────────────────
 function getBadgeCls(at){return at?.cls==='pool'?'badge-pool':at?.cls==='strength'?'badge-strength':at?.cls==='cardio'?'badge-cardio':'badge-custom';}
 function getChipSel(at){return at?.cls==='pool'?'pool sel':at?.cls==='strength'?'strength sel':at?.cls==='cardio'?'cardio sel':'custom sel';}
 
+// ── Render types ──────────────────────────────────────────
 function renderTypes(){
   document.getElementById('at-chips').innerHTML=types.map(t=>`
     <div class="at-chip-wrap">
-      <div class="at-chip ${t.id===selType?getChipSel(t):t.cls||''}" onclick="selType='${t.id}';renderTypes();renderEx()">${t.label}</div>
+      <div class="at-chip ${t.id===selType?getChipSel(t):t.cls||''}" onclick="selTypeClick('${t.id}')">${t.label}</div>
       <div class="at-chip-actions">
         <button class="chip-btn" onclick="openEditType('${t.id}')" title="ערוך">✏️</button>
         <button class="chip-btn chip-del" onclick="deleteType('${t.id}')" title="מחק">🗑</button>
       </div>
     </div>`).join('');
 }
+function selTypeClick(id){selType=id;renderTypes();renderEx();}
+window.selTypeClick=selTypeClick;
 
+// ── Render exercises ──────────────────────────────────────
 function renderEx(){
   const at=types.find(t=>t.id===selType);
   document.getElementById('ex-title').textContent=at?at.label:'תרגילים';
   const list=document.getElementById('ex-list');
   const items=exercises.filter(e=>e.aId===selType);
-  if(!items.length){list.innerHTML='<div class="empty"><div class="empty-icon">🏋️</div><div class="empty-txt">אין תרגילים עדיין</div><div style="font-size:13px;margin-top:6px;color:var(--muted)">לחץ "+ תרגיל חדש" להוספה</div></div>';return;}
+  if(!items.length){
+    list.innerHTML='<div class="empty"><div class="empty-icon">🏋️</div><div class="empty-txt">אין תרגילים עדיין</div><div style="font-size:13px;margin-top:6px;color:var(--muted)">לחץ &quot;+ תרגיל חדש&quot; להוספה</div></div>';
+    return;
+  }
   list.innerHTML=items.map(ex=>{
     const ri=exercises.indexOf(ex);
     const meta=[];
-    if(ex.pos)meta.push(ex.pos);if(ex.sets)meta.push('סטים: '+ex.sets);if(ex.reps)meta.push('חזרות: '+ex.reps);
-    if(ex.weight)meta.push(ex.weight+'ק"ג');if(ex.dur)meta.push(ex.dur+"'");if(ex.dist)meta.push(ex.dist+"מ'");
+    if(ex.pos)meta.push(ex.pos);
+    if(ex.sets)meta.push('סטים: '+ex.sets);
+    if(ex.reps)meta.push('חזרות: '+ex.reps);
+    if(ex.weight)meta.push(ex.weight+'ק"ג');
+    if(ex.dur)meta.push(ex.dur+"'");
+    if(ex.dist)meta.push(ex.dist+"מ'");
     return `<div class="ex-card">
       <div class="ex-top">
         <div><div class="ex-name">${ex.name}</div><span class="ex-badge ${getBadgeCls(at)}">${at?.label||''}</span></div>
@@ -322,63 +331,33 @@ function renderEx(){
 
 function markDone(i){
   exercises[i].done=!exercises[i].done;
-  if(exercises[i].done)history.unshift({name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()});
-  save();renderEx();
+  if(exercises[i].done) history.unshift({name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()});
+  saveAll(); renderEx();
 }
-function delEx(i){if(confirm('למחוק?')){{exercises.splice(i,1);save();renderEx();}}}
+window.markDone=markDone;
+
+function delEx(i){
+  if(confirm('למחוק?')){exercises.splice(i,1);saveAll();renderEx();}
+}
+window.delEx=delEx;
+
+// ── Exercise modal ────────────────────────────────────────
+let editExIdx=null;
 
 function openExModal(){
   if(!selType){alert('בחר סוג פעילות תחילה');return;}
   editExIdx=null;
   document.getElementById('ex-modal-title').textContent='תרגיל חדש';
-  document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===selType?'selected':''} >${t.label}</option>`).join('');
+  document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===selType?'selected':''}>${t.label}</option>`).join('');
   ['f-name','f-sets','f-reps','f-weight','f-dur','f-dist'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ex-modal').classList.add('open');
 }
+window.openExModal=openExModal;
 
-function saveExercise(){
-  const name=document.getElementById('f-name').value.trim();
-  if(!name){alert('נא להזין שם');return;}
-  const data={name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value};
-  if(editExIdx!==null){
-    exercises[editExIdx]={...exercises[editExIdx],...data};
-  } else {
-    exercises.push({...data,done:false});
-  }
-  save();closeModal('ex-modal');renderEx();
-}
-
-function openTypeModal(){editTypeId=null;document.getElementById('type-name').value='';document.getElementById('type-modal-title').textContent='סוג פעילות חדש';document.getElementById('type-save-btn').textContent='הוסף';document.getElementById('type-modal').classList.add('open');}
-function saveType(){const n=document.getElementById('type-name').value.trim();if(!n)return;if(editTypeId){const t=types.find(t=>t.id===editTypeId);if(t)t.label=n;}else{types.push({id:'c_'+Date.now(),label:n,cls:'custom'});}save();closeModal('type-modal');renderTypes();}
-
-function toggleAddPos(){const r=document.getElementById('add-pos-row');r.style.display=r.style.display==='flex'?'none':'flex';}
-function addPos(){const v=document.getElementById('pos-input').value.trim();if(!v)return;const s=document.getElementById('f-pos');s.add(new Option(v,v));s.value=v;document.getElementById('add-pos-row').style.display='none';}
-
-function deleteType(id){
-  const t=types.find(t=>t.id===id);
-  const hasEx=exercises.some(e=>e.aId===id);
-  if(hasEx){alert('לא ניתן למחוק סוג פעילות שיש בו תרגילים. מחק תחילה את התרגילים.');return;}
-  if(confirm('למחוק את סוג הפעילות "'+t.label+'"?')){
-    types=types.filter(t=>t.id!==id);
-    if(selType===id)selType=types[0]?.id;
-    save();renderTypes();renderEx();
-  }
-}
-
-let editTypeId=null;
-function openEditType(id){
-  editTypeId=id;
-  const t=types.find(t=>t.id===id);
-  document.getElementById('type-name').value=t.label;
-  document.getElementById('type-modal-title').textContent='ערוך סוג פעילות';
-  document.getElementById('type-save-btn').textContent='שמור שינויים';
-  document.getElementById('type-modal').classList.add('open');
-}
-
-let editExIdx=null;
 function openEditEx(i){
   editExIdx=i;
   const ex=exercises[i];
+  document.getElementById('ex-modal-title').textContent='ערוך תרגיל';
   document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===ex.aId?'selected':''}>${t.label}</option>`).join('');
   document.getElementById('f-name').value=ex.name;
   document.getElementById('f-pos').value=ex.pos||'עמידה';
@@ -387,42 +366,150 @@ function openEditEx(i){
   document.getElementById('f-weight').value=ex.weight||'';
   document.getElementById('f-dur').value=ex.dur||'';
   document.getElementById('f-dist').value=ex.dist||'';
-  document.getElementById('ex-modal-title').textContent='ערוך תרגיל';
   document.getElementById('ex-modal').classList.add('open');
 }
+window.openEditEx=openEditEx;
 
-function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='ex-modal'){editExIdx=null;document.getElementById('ex-modal-title').textContent='תרגיל חדש';}if(id==='type-modal'){editTypeId=null;document.getElementById('type-modal-title').textContent='סוג פעילות חדש';document.getElementById('type-save-btn').textContent='הוסף';}}
+function saveExercise(){
+  const name=document.getElementById('f-name').value.trim();
+  if(!name){alert('נא להזין שם');return;}
+  const data={name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value};
+  if(editExIdx!==null){exercises[editExIdx]={...exercises[editExIdx],...data};}
+  else{exercises.push({...data,done:false});}
+  saveAll();closeModal('ex-modal');renderEx();
+}
+window.saveExercise=saveExercise;
+
+// ── Type modal ────────────────────────────────────────────
+let editTypeId=null;
+
+function openTypeModal(){
+  editTypeId=null;
+  document.getElementById('type-name').value='';
+  document.getElementById('type-modal-title').textContent='סוג פעילות חדש';
+  document.getElementById('type-save-btn').textContent='הוסף';
+  document.getElementById('type-modal').classList.add('open');
+}
+window.openTypeModal=openTypeModal;
+
+function openEditType(id){
+  editTypeId=id;
+  const t=types.find(t=>t.id===id);
+  document.getElementById('type-name').value=t.label;
+  document.getElementById('type-modal-title').textContent='ערוך סוג פעילות';
+  document.getElementById('type-save-btn').textContent='שמור שינויים';
+  document.getElementById('type-modal').classList.add('open');
+}
+window.openEditType=openEditType;
+
+function saveType(){
+  const n=document.getElementById('type-name').value.trim();
+  if(!n)return;
+  if(editTypeId){const t=types.find(t=>t.id===editTypeId);if(t)t.label=n;}
+  else{types.push({id:'c_'+Date.now(),label:n,cls:'custom'});}
+  saveAll();closeModal('type-modal');renderTypes();
+}
+window.saveType=saveType;
+
+function deleteType(id){
+  const t=types.find(t=>t.id===id);
+  const hasEx=exercises.some(e=>e.aId===id);
+  if(hasEx){alert('לא ניתן למחוק סוג פעילות שיש בו תרגילים. מחק תחילה את התרגילים.');return;}
+  if(confirm('למחוק את סוג הפעילות "'+t.label+'"?')){
+    types=types.filter(t=>t.id!==id);
+    if(selType===id) selType=types[0]?.id;
+    saveAll();renderTypes();renderEx();
+  }
+}
+window.deleteType=deleteType;
+
+// ── Shared helpers ────────────────────────────────────────
+function toggleAddPos(){const r=document.getElementById('add-pos-row');r.style.display=r.style.display==='flex'?'none':'flex';}
+function addPos(){const v=document.getElementById('pos-input').value.trim();if(!v)return;const s=document.getElementById('f-pos');s.add(new Option(v,v));s.value=v;document.getElementById('add-pos-row').style.display='none';}
+window.toggleAddPos=toggleAddPos;
+window.addPos=addPos;
+
+function closeModal(id){
+  document.getElementById(id).classList.remove('open');
+  if(id==='ex-modal'){editExIdx=null;document.getElementById('ex-modal-title').textContent='תרגיל חדש';}
+  if(id==='type-modal'){editTypeId=null;document.getElementById('type-modal-title').textContent='סוג פעילות חדש';document.getElementById('type-save-btn').textContent='הוסף';}
+}
+window.closeModal=closeModal;
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
+// ── History ───────────────────────────────────────────────
 function renderHistory(){
   const total=history.length;
   const week=history.filter(h=>(new Date()-new Date(h.date))<7*864e5).length;
   const uTypes=[...new Set(history.map(h=>h.aId))].length;
-  document.getElementById('stats-grid').innerHTML=`<div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">סה"כ אימונים</div></div><div class="stat-card"><div class="stat-num">${week}</div><div class="stat-lbl">השבוע</div></div><div class="stat-card"><div class="stat-num">${uTypes}</div><div class="stat-lbl">סוגי פעילות</div></div>`;
-  document.getElementById('hist-filters').innerHTML=`<button class="fc ${histFilter==='all'?'active':''}" onclick="histFilter='all';renderHistory()">הכל</button>`+types.map(t=>`<button class="fc ${histFilter===t.id?'active':''}" onclick="histFilter='${t.id}';renderHistory()">${t.label}</button>`).join('');
+  document.getElementById('stats-grid').innerHTML=`
+    <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">סה"כ אימונים</div></div>
+    <div class="stat-card"><div class="stat-num">${week}</div><div class="stat-lbl">השבוע</div></div>
+    <div class="stat-card"><div class="stat-num">${uTypes}</div><div class="stat-lbl">סוגי פעילות</div></div>`;
+  document.getElementById('hist-filters').innerHTML=
+    `<button class="fc ${histFilter==='all'?'active':''}" onclick="setHistFilter('all')">הכל</button>`+
+    types.map(t=>`<button class="fc ${histFilter===t.id?'active':''}" onclick="setHistFilter('${t.id}')">${t.label}</button>`).join('');
   const filtered=histFilter==='all'?history:history.filter(h=>h.aId===histFilter);
   const listEl=document.getElementById('hist-list');
-  if(!filtered.length){listEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">אין היסטוריה עדיין</div><div style="font-size:13px;margin-top:6px;color:var(--muted)">בצע תרגיל כדי שיופיע כאן</div></div>';return;}
+  if(!filtered.length){listEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">אין היסטוריה עדיין</div></div>';return;}
   listEl.innerHTML=filtered.map(h=>{
     const at=types.find(t=>t.id===h.aId);
-    const meta=[];if(h.pos)meta.push(h.pos);if(h.sets)meta.push('סטים: '+h.sets);if(h.reps)meta.push('חזרות: '+h.reps);if(h.weight)meta.push(h.weight+'ק"ג');if(h.dur)meta.push(h.dur+"'");if(h.dist)meta.push(h.dist+"מ'");
+    const meta=[];
+    if(h.pos)meta.push(h.pos);if(h.sets)meta.push('סטים: '+h.sets);if(h.reps)meta.push('חזרות: '+h.reps);
+    if(h.weight)meta.push(h.weight+'ק"ג');if(h.dur)meta.push(h.dur+"'");if(h.dist)meta.push(h.dist+"מ'");
     const d=new Date(h.date).toLocaleString('he-IL',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'});
-    return `<div class="hist-item"><div class="hist-date">${d}</div><div style="display:flex;align-items:center;gap:8px"><div class="hist-name">${h.name}</div>${at?`<span class="ex-badge ${getBadgeCls(at)}">${at.label}</span>`:''}</div><div class="hist-meta">${meta.map(m=>`<span>${m}</span>`).join('')}</div></div>`;
+    return `<div class="hist-item"><div class="hist-date">${d}</div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <div class="hist-name">${h.name}</div>
+        ${at?`<span class="ex-badge ${getBadgeCls(at)}">${at.label}</span>`:''}
+      </div>
+      <div class="hist-meta">${meta.map(m=>`<span>${m}</span>`).join('')}</div>
+    </div>`;
   }).join('');
 }
+function setHistFilter(f){histFilter=f;renderHistory();}
+window.setHistFilter=setHistFilter;
+window.renderHistory=renderHistory;
 
-// Service Worker inline
-const swCode=`
-const CACHE='sport-v1';
-const ASSETS=['./'];
-self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS))));
-self.addEventListener('fetch',e=>e.respondWith(caches.match(e.request).then(r=>r||fetch(e.request))));
-`;
-const swBlob=new Blob([swCode],{type:'application/javascript'});
-const swUrl=URL.createObjectURL(swBlob);
+// ── Status indicator ──────────────────────────────────────
+function showStatus(msg, color='#0f6e56'){
+  const el=document.getElementById('sync-status');
+  if(el){el.textContent=msg;el.style.color=color;setTimeout(()=>el.textContent='',3000);}
+}
 
+// ── Init: load from Firebase with live sync ───────────────
+onValue(ref(db, UID), (snapshot) => {
+  const data = snapshot.val();
+  if(data) {
+    types = data.types || DEF_TYPES;
+    exercises = Array.isArray(data.exercises) ? data.exercises : (data.exercises ? Object.values(data.exercises) : []);
+    history = Array.isArray(data.history) ? data.history : (data.history ? Object.values(data.history) : []);
+  } else {
+    // First time - save defaults
+    types = DEF_TYPES;
+    exercises = [];
+    history = [];
+    saveAll();
+  }
+  if(!selType || !types.find(t=>t.id===selType)) selType = types[0]?.id;
+  renderTypes();
+  renderEx();
+  if(document.getElementById('panel-history').style.display!=='none') renderHistory();
+  if(!initialized){ showStatus('✓ מסונכרן'); initialized=true; }
+}, (error) => {
+  console.error('Firebase error:', error);
+  // Fallback to defaults
+  types = DEF_TYPES;
+  exercises = [];
+  history = [];
+  selType = types[0]?.id;
+  renderTypes();
+  renderEx();
+  showStatus('⚠ שגיאת חיבור', '#a32d2d');
+});
 
 </script>
+
 <script>
 if('serviceWorker' in navigator){
   navigator.serviceWorker.register('./sw.js').catch(e=>console.log(e));
