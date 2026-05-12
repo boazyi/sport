@@ -112,6 +112,12 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 .empty{text-align:center;padding:48px 16px;color:var(--muted)}
 .empty-icon{font-size:40px;margin-bottom:12px}
 .empty-txt{font-size:14px;font-weight:600}
+.at-chip-wrap{display:flex;align-items:center;gap:4px}
+.at-chip-actions{display:flex;gap:2px;opacity:0;transition:opacity .2s}
+.at-chip-wrap:hover .at-chip-actions{opacity:1}
+.chip-btn{background:none;border:none;cursor:pointer;font-size:13px;padding:2px 4px;border-radius:6px;line-height:1}
+.chip-btn:hover{background:var(--border)}
+.chip-del:hover{background:var(--red-light)}
 </style>
 </head>
 <body>
@@ -164,7 +170,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 <div class="overlay" id="ex-modal">
   <div class="modal">
     <div class="modal-handle"></div>
-    <div class="modal-title">תרגיל חדש</div>
+    <div class="modal-title" id="ex-modal-title">תרגיל חדש</div>
     <div class="form-grid">
       <div class="fg full">
         <label>שם התרגיל</label>
@@ -202,14 +208,14 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 <div class="overlay" id="type-modal">
   <div class="modal" style="max-height:auto">
     <div class="modal-handle"></div>
-    <div class="modal-title">סוג פעילות חדש</div>
+    <div class="modal-title" id="type-modal-title">סוג פעילות חדש</div>
     <div class="fg">
       <label>שם</label>
       <input id="type-name" type="text" placeholder="למשל: יוגה"/>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('type-modal')">ביטול</button>
-      <button class="btn btn-primary" onclick="saveType()">הוסף</button>
+      <button class="btn btn-primary" id="type-save-btn" onclick="saveType()">הוסף</button>
     </div>
   </div>
 </div>
@@ -247,7 +253,14 @@ function getBadgeCls(at){return at?.cls==='pool'?'badge-pool':at?.cls==='strengt
 function getChipSel(at){return at?.cls==='pool'?'pool sel':at?.cls==='strength'?'strength sel':at?.cls==='cardio'?'cardio sel':'custom sel';}
 
 function renderTypes(){
-  document.getElementById('at-chips').innerHTML=types.map(t=>`<div class="at-chip ${t.id===selType?getChipSel(t):t.cls||''}" onclick="selType='${t.id}';renderTypes();renderEx()">${t.label}</div>`).join('');
+  document.getElementById('at-chips').innerHTML=types.map(t=>`
+    <div class="at-chip-wrap">
+      <div class="at-chip ${t.id===selType?getChipSel(t):t.cls||''}" onclick="selType='${t.id}';renderTypes();renderEx()">${t.label}</div>
+      <div class="at-chip-actions">
+        <button class="chip-btn" onclick="openEditType('${t.id}')" title="ערוך">✏️</button>
+        <button class="chip-btn chip-del" onclick="deleteType('${t.id}')" title="מחק">🗑</button>
+      </div>
+    </div>`).join('');
 }
 
 function renderEx(){
@@ -264,7 +277,10 @@ function renderEx(){
     return `<div class="ex-card">
       <div class="ex-top">
         <div><div class="ex-name">${ex.name}</div><span class="ex-badge ${getBadgeCls(at)}">${at?.label||''}</span></div>
-        <button class="del-btn" onclick="delEx(${ri})">&#xD7;</button>
+        <div style="display:flex;gap:6px">
+          <button class="del-btn" style="color:var(--blue)" onclick="openEditEx(${ri})" title="ערוך">✏</button>
+          <button class="del-btn" onclick="delEx(${ri})">&#xD7;</button>
+        </div>
       </div>
       <div class="ex-meta">${meta.map(m=>`<span class="meta-pill">${m}</span>`).join('')}</div>
       <button class="done-btn ${ex.done?'done':''}" onclick="markDone(${ri})">${ex.done?'✓ בוצע היום!':'סמן כבוצע'}</button>
@@ -281,6 +297,8 @@ function delEx(i){if(confirm('למחוק?')){{exercises.splice(i,1);save();rende
 
 function openExModal(){
   if(!selType){alert('בחר סוג פעילות תחילה');return;}
+  editExIdx=null;
+  document.getElementById('ex-modal-title').textContent='תרגיל חדש';
   document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===selType?'selected':''} >${t.label}</option>`).join('');
   ['f-name','f-sets','f-reps','f-weight','f-dur','f-dist'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ex-modal').classList.add('open');
@@ -289,17 +307,59 @@ function openExModal(){
 function saveExercise(){
   const name=document.getElementById('f-name').value.trim();
   if(!name){alert('נא להזין שם');return;}
-  exercises.push({name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value,done:false});
+  const data={name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value};
+  if(editExIdx!==null){
+    exercises[editExIdx]={...exercises[editExIdx],...data};
+  } else {
+    exercises.push({...data,done:false});
+  }
   save();closeModal('ex-modal');renderEx();
 }
 
-function openTypeModal(){document.getElementById('type-name').value='';document.getElementById('type-modal').classList.add('open');}
-function saveType(){const n=document.getElementById('type-name').value.trim();if(!n)return;types.push({id:'c_'+Date.now(),label:n,cls:'custom'});save();closeModal('type-modal');renderTypes();}
+function openTypeModal(){editTypeId=null;document.getElementById('type-name').value='';document.getElementById('type-modal-title').textContent='סוג פעילות חדש';document.getElementById('type-save-btn').textContent='הוסף';document.getElementById('type-modal').classList.add('open');}
+function saveType(){const n=document.getElementById('type-name').value.trim();if(!n)return;if(editTypeId){const t=types.find(t=>t.id===editTypeId);if(t)t.label=n;}else{types.push({id:'c_'+Date.now(),label:n,cls:'custom'});}save();closeModal('type-modal');renderTypes();}
 
 function toggleAddPos(){const r=document.getElementById('add-pos-row');r.style.display=r.style.display==='flex'?'none':'flex';}
 function addPos(){const v=document.getElementById('pos-input').value.trim();if(!v)return;const s=document.getElementById('f-pos');s.add(new Option(v,v));s.value=v;document.getElementById('add-pos-row').style.display='none';}
 
-function closeModal(id){document.getElementById(id).classList.remove('open');}
+function deleteType(id){
+  const t=types.find(t=>t.id===id);
+  const hasEx=exercises.some(e=>e.aId===id);
+  if(hasEx){alert('לא ניתן למחוק סוג פעילות שיש בו תרגילים. מחק תחילה את התרגילים.');return;}
+  if(confirm('למחוק את סוג הפעילות "'+t.label+'"?')){
+    types=types.filter(t=>t.id!==id);
+    if(selType===id)selType=types[0]?.id;
+    save();renderTypes();renderEx();
+  }
+}
+
+let editTypeId=null;
+function openEditType(id){
+  editTypeId=id;
+  const t=types.find(t=>t.id===id);
+  document.getElementById('type-name').value=t.label;
+  document.getElementById('type-modal-title').textContent='ערוך סוג פעילות';
+  document.getElementById('type-save-btn').textContent='שמור שינויים';
+  document.getElementById('type-modal').classList.add('open');
+}
+
+let editExIdx=null;
+function openEditEx(i){
+  editExIdx=i;
+  const ex=exercises[i];
+  document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===ex.aId?'selected':''}>${t.label}</option>`).join('');
+  document.getElementById('f-name').value=ex.name;
+  document.getElementById('f-pos').value=ex.pos||'עמידה';
+  document.getElementById('f-sets').value=ex.sets||'';
+  document.getElementById('f-reps').value=ex.reps||'';
+  document.getElementById('f-weight').value=ex.weight||'';
+  document.getElementById('f-dur').value=ex.dur||'';
+  document.getElementById('f-dist').value=ex.dist||'';
+  document.getElementById('ex-modal-title').textContent='ערוך תרגיל';
+  document.getElementById('ex-modal').classList.add('open');
+}
+
+function closeModal(id){document.getElementById(id).classList.remove('open');if(id==='ex-modal'){editExIdx=null;document.getElementById('ex-modal-title').textContent='תרגיל חדש';}if(id==='type-modal'){editTypeId=null;document.getElementById('type-modal-title').textContent='סוג פעילות חדש';document.getElementById('type-save-btn').textContent='הוסף';}}
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 function renderHistory(){
