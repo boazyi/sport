@@ -241,7 +241,7 @@ const UID = 'boazyi';
 const DEF_TYPES=[{id:'pool',label:'אימון בבריכה',cls:'pool'},{id:'strength',label:'אימון כח',cls:'strength'},{id:'cardio',label:'אימון אירובי',cls:'cardio'}];
 let types=[];
 let exercises=[];
-let history=[];
+let workoutLog=[];
 let selType=null;
 let histFilter='all';
 let deferredPrompt=null;
@@ -334,7 +334,7 @@ function markDone(i){
   exercises[i].done = !wasDone;
   if(!wasDone){
     const entry = {name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()};
-    history = [entry, ...history];
+    workoutLog = [entry, ...workoutLog];
   }
   // Save atomically
   set(ref(db, UID+'/exercises'), exercises);
@@ -446,9 +446,9 @@ document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{
 
 // ── History ───────────────────────────────────────────────
 function renderHistory(){
-  const total=history.length;
-  const week=history.filter(h=>(new Date()-new Date(h.date))<7*864e5).length;
-  const uTypes=[...new Set(history.map(h=>h.aId))].length;
+  const total=workoutLog.length;
+  const week=workoutLog.filter(h=>(new Date()-new Date(h.date))<7*864e5).length;
+  const uTypes=[...new Set(workoutLog.map(h=>h.aId))].length;
   document.getElementById('stats-grid').innerHTML=`
     <div class="stat-card"><div class="stat-num">${total}</div><div class="stat-lbl">סה"כ אימונים</div></div>
     <div class="stat-card"><div class="stat-num">${week}</div><div class="stat-lbl">השבוע</div></div>
@@ -456,7 +456,7 @@ function renderHistory(){
   document.getElementById('hist-filters').innerHTML=
     `<button class="fc ${histFilter==='all'?'active':''}" onclick="setHistFilter('all')">הכל</button>`+
     types.map(t=>`<button class="fc ${histFilter===t.id?'active':''}" onclick="setHistFilter('${t.id}')">${t.label}</button>`).join('');
-  const filtered=histFilter==='all'?history:history.filter(h=>h.aId===histFilter);
+  const filtered=histFilter==='all'?workoutLog:workoutLog.filter(h=>h.aId===histFilter);
   const listEl=document.getElementById('hist-list');
   if(!filtered.length){listEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">אין היסטוריה עדיין</div></div>';return;}
   listEl.innerHTML=filtered.map(h=>{
@@ -490,12 +490,12 @@ onValue(ref(db, UID), (snapshot) => {
   if(data) {
     types = data.types || DEF_TYPES;
     exercises = Array.isArray(data.exercises) ? data.exercises : (data.exercises ? Object.values(data.exercises) : []);
-    history = Array.isArray(data.history) ? data.history : (data.history ? Object.values(data.history) : []);
+    workoutLog = Array.isArray(data.history) ? data.history : (data.history ? Object.values(data.history) : []);
   } else {
     // First time - save defaults
     types = DEF_TYPES;
     exercises = [];
-    history = [];
+    workoutLog = [];
     saveAll();
   }
   if(!selType || !types.find(t=>t.id===selType)) selType = types[0]?.id;
@@ -508,7 +508,7 @@ onValue(ref(db, UID), (snapshot) => {
   // Fallback to defaults
   types = DEF_TYPES;
   exercises = [];
-  history = [];
+  workoutLog = [];
   selType = types[0]?.id;
   renderTypes();
   renderEx();
