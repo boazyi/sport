@@ -247,6 +247,9 @@ let histFilter='all';
 let deferredPrompt=null;
 let initialized=false;
 
+// Expose to window for onclick handlers
+Object.defineProperty(window, 'workoutLog', { get: () => workoutLog });
+
 // ── Firebase helpers ──────────────────────────────────────
 function saveAll(){
   set(ref(db, UID+'/types'), types);
