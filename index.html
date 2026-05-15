@@ -330,9 +330,16 @@ function renderEx(){
 }
 
 function markDone(i){
-  exercises[i].done=!exercises[i].done;
-  if(exercises[i].done) history.unshift({name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()});
-  saveAll(); renderEx();
+  const wasDone = exercises[i].done;
+  exercises[i].done = !wasDone;
+  if(!wasDone){
+    const entry = {name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()};
+    history = [entry, ...history];
+  }
+  // Save atomically
+  set(ref(db, UID+'/exercises'), exercises);
+  set(ref(db, UID+'/history'), history);
+  renderEx();
 }
 window.markDone=markDone;
 
