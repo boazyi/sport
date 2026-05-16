@@ -254,7 +254,7 @@ Object.defineProperty(window, 'workoutLog', { get: () => workoutLog });
 function saveAll(){
   set(ref(db, UID+'/types'), types);
   set(ref(db, UID+'/exercises'), exercises);
-  set(ref(db, UID+'/history'), history);
+  set(ref(db, UID+'/history'), workoutLog);
 }
 
 // ── PWA Install ───────────────────────────────────────────
