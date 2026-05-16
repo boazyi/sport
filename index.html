@@ -915,7 +915,7 @@ function buildStatsGrid(data, color){
   if(avgWeight) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgWeight}</div><div class="stat-lbl">משקל ממוצע</div></div>`;
   if(avgReps) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgReps}</div><div class="stat-lbl">חזרות ממוצע</div></div>`;
   if(avgSets) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgSets}</div><div class="stat-lbl">סטים ממוצע</div></div>`;
-  if(avgDur) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgDur}'</div><div class="stat-lbl">משך ממוצע</div></div>`;
+  if(avgDur) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgDur} דק</div><div class="stat-lbl">משך ממוצע</div></div>`;
   if(avgDist) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgDist}</div><div class="stat-lbl">מרחק ממוצע</div></div>`;
   return `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">${cards}</div>`;
 }
@@ -928,8 +928,8 @@ function buildCompare(dataA, dataB){
     {key:'weight', label:'משקל ממוצע', a:parseFloat(calcAvg(dataA,'weight')), b:parseFloat(calcAvg(dataB,'weight')), unit:'ק"ג'},
     {key:'reps', label:'חזרות ממוצע', a:parseFloat(calcAvg(dataA,'reps')), b:parseFloat(calcAvg(dataB,'reps')), unit:''},
     {key:'sets', label:'סטים ממוצע', a:parseFloat(calcAvg(dataA,'sets')), b:parseFloat(calcAvg(dataB,'sets')), unit:''},
-    {key:'dur', label:'משך ממוצע', a:parseFloat(calcAvg(dataA,'dur')), b:parseFloat(calcAvg(dataB,'dur')), unit:"'"},
-    {key:'dist', label:'מרחק ממוצע', a:parseFloat(calcAvg(dataA,'dist')), b:parseFloat(calcAvg(dataB,'dist')), unit:"מ'"},
+    {key:'dur', label:'משך ממוצע', a:parseFloat(calcAvg(dataA,'dur')), b:parseFloat(calcAvg(dataB,'dur')), unit:'דק'},
+    {key:'dist', label:'מרחק ממוצע', a:parseFloat(calcAvg(dataA,'dist')), b:parseFloat(calcAvg(dataB,'dist')), unit:'מ'},
   ].filter(m=>!isNaN(m.a)&&!isNaN(m.b)&&m.a>0&&m.b>0);
 
   const rows=metrics.map(m=>{
@@ -947,8 +947,8 @@ function buildCompare(dataA, dataB){
 
   return `<div style="display:flex;justify-content:space-between;padding:6px 0;margin-bottom:4px;border-bottom:1px solid var(--border)">
     <div style="font-size:11px;font-weight:700;color:var(--muted)">מדד</div>
-    <div style="font-size:11px;font-weight:700;color:var(--blue)">תקופה א'</div>
-    <div style="font-size:11px;font-weight:700;color:var(--teal)">תקופה ב'</div>
+    <div style="font-size:11px;font-weight:700;color:var(--blue)">תקופה א</div>
+    <div style="font-size:11px;font-weight:700;color:var(--teal)">תקופה ב</div>
     <div style="font-size:11px;font-weight:700;color:var(--muted)">שינוי</div>
   </div>${rows}`;
 }
@@ -962,8 +962,8 @@ function renderStats(){
   const dataA=filterByDates(fromA,toA);
   const dataB=filterByDates(fromB,toB);
 
-  document.getElementById('stats-a-grid').innerHTML=dataA?buildStatsGrid(dataA,'var(--blue)'):'<div style="font-size:13px;color:var(--muted)">בחר תאריכים לתקופה א'</div>';
-  document.getElementById('stats-b-grid').innerHTML=dataB?buildStatsGrid(dataB,'var(--teal)'):'<div style="font-size:13px;color:var(--muted)">בחר תאריכים לתקופה ב'</div>';
+  document.getElementById('stats-a-grid').innerHTML=dataA?buildStatsGrid(dataA,'var(--blue)'):"<div style='font-size:13px;color:var(--muted)'>בחר תאריכים לתקופה א</div>";
+  document.getElementById('stats-b-grid').innerHTML=dataB?buildStatsGrid(dataB,'var(--teal)'):"<div style='font-size:13px;color:var(--muted)'>בחר תאריכים לתקופה ב</div>";
 
   const compareEl=document.getElementById('stats-compare');
   if(dataA&&dataA.length&&dataB&&dataB.length){
