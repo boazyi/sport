@@ -246,6 +246,7 @@ let selType=null;
 let histFilter='all';
 let deferredPrompt=null;
 let initialized=false;
+let ignoreNext=0;
 
 
 // ── Firebase helpers ──────────────────────────────────────
@@ -337,10 +338,9 @@ function markDone(i){
     const entry = {name:exercises[i].name,aId:exercises[i].aId,pos:exercises[i].pos,sets:exercises[i].sets,reps:exercises[i].reps,weight:exercises[i].weight,dur:exercises[i].dur,dist:exercises[i].dist,date:new Date().toISOString()};
     workoutLog = [entry, ...workoutLog];
   }
-  // Save atomically
+  ignoreNext = 2;
   db.ref(UID+'/exercises').set(exercises);
   db.ref(UID+'/history').set(workoutLog);
-  console.log('Saved to Firebase, workoutLog:', workoutLog.length);
   renderEx();
 }
 
@@ -487,6 +487,7 @@ function showStatus(msg, color='#0f6e56'){
 
 // ── Init: load from Firebase with live sync ───────────────
 db.ref(UID).on('value', (snapshot) => {
+  if(ignoreNext > 0){ ignoreNext--; return; }
   const data = snapshot.val();
   if(data) {
     types = data.types || DEF_TYPES;
