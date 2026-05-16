@@ -117,6 +117,10 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 .set-btn{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:transparent;cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);transition:all .2s;display:flex;align-items:center;justify-content:center}
 .set-btn.done{background:var(--teal);border-color:var(--teal);color:#fff}
 .set-btn:hover:not(.done){border-color:var(--teal);color:var(--teal)}
+.set-btn.waiting{background:var(--red-light);border-color:var(--red);color:var(--red);animation:pulse 1s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
+.countdown-bar{height:4px;border-radius:2px;background:var(--border);margin-bottom:10px;overflow:hidden}
+.countdown-bar-inner{height:100%;background:var(--red);border-radius:2px;transition:width 1s linear}
 .at-chip-wrap{display:flex;align-items:center;gap:4px}
 .at-chip-actions{display:flex;gap:2px;opacity:0;transition:opacity .2s}
 .at-chip-wrap:hover .at-chip-actions{opacity:1}
@@ -201,6 +205,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
       <div class="fg"><label>משקל (ק"ג)</label><input id="f-weight" type="number" min="0" step="0.5" placeholder="0"/></div>
       <div class="fg"><label>משך (דקות)</label><input id="f-dur" type="number" min="0" placeholder="0"/></div>
       <div class="fg full"><label>מרחק (מטר)</label><input id="f-dist" type="number" min="0" placeholder="0"/></div>
+      <div class="fg full"><label>זמן מנוחה בין סטים (שניות)</label><input id="f-rest" type="number" min="0" placeholder="60"/></div>
     </div>
     <div class="modal-actions">
       <button class="btn" onclick="closeModal('ex-modal')">ביטול</button>
@@ -322,14 +327,24 @@ function renderEx(){
     if(ex.weight)meta.push(ex.weight+'ק"ג');
     if(ex.dur)meta.push(ex.dur+"'");
     if(ex.dist)meta.push(ex.dist+"מ'");
+    if(ex.rest)meta.push('מנוחה: '+ex.rest+'"');
     const totalSets = parseInt(ex.sets)||0;
     const doneSets = ex.doneSets||0;
+    const waitingSet = ex.waitingSet !== undefined ? ex.waitingSet : null;
+    const restTime = parseInt(ex.rest)||0;
     let bottomSection = '';
     if(totalSets > 0 && !ex.done){
-      const setBtns = Array.from({length:totalSets},(_,s)=>
-        `<button class="set-btn ${s<doneSets?'done':''}" onclick="markSet(${ri},${s})">${s+1}</button>`
-      ).join('');
-      bottomSection = `<div class="sets-row"><span class="sets-label">סטים:</span>${setBtns}</div>`;
+      const setBtns = Array.from({length:totalSets},(_,s)=>{
+        let cls = '';
+        if(s < doneSets){
+          cls = (s === waitingSet) ? 'waiting' : 'done';
+        }
+        return `<button class="set-btn ${cls}" onclick="markSet(${ri},${s})">${s+1}</button>`;
+      }).join('');
+      const countdownHtml = waitingSet !== null && restTime > 0 ? `
+        <div class="countdown-bar"><div class="countdown-bar-inner" id="countdown-bar-${ri}" style="width:100%"></div></div>
+        <div style="font-size:12px;color:var(--red);text-align:center;margin-bottom:6px" id="countdown-label-${ri}">מחשב...</div>` : '';
+      bottomSection = `<div class="sets-row"><span class="sets-label">סטים:</span>${setBtns}</div>${countdownHtml}`;
     } else {
       bottomSection = `<button class="done-btn ${ex.done?'done':''}" onclick="markDone(${ri})">${ex.done?'✓ בוצע היום!':'סמן כבוצע'}</button>`;
     }
@@ -361,32 +376,78 @@ function markDone(i){
   renderEx();
 }
 
+let countdownTimers = {}; // key: exIdx, value: intervalId
+
 function markSet(i, setIdx){
   const ex = exercises[i];
   const totalSets = parseInt(ex.sets)||0;
   const doneSets = ex.doneSets||0;
+  const restTime = parseInt(ex.rest)||0;
 
   // Toggle: if clicking already-done set, undo from that set onward
   if(setIdx < doneSets){
     ex.doneSets = setIdx;
+    // Cancel any running countdown for this exercise
+    if(countdownTimers[i]){ clearInterval(countdownTimers[i]); delete countdownTimers[i]; }
+    ex.waitingSet = null;
+    ignoreNext = 1;
+    db.ref(UID+'/exercises').set(exercises);
+    renderEx();
+    return;
   } else {
     ex.doneSets = setIdx + 1;
   }
 
-  // If all sets done → mark exercise as done
+  // If all sets done → mark exercise as done immediately
   if(ex.doneSets >= totalSets){
     ex.done = true;
     ex.doneSets = totalSets;
+    ex.waitingSet = null;
+    if(countdownTimers[i]){ clearInterval(countdownTimers[i]); delete countdownTimers[i]; }
     const entry = {name:ex.name,aId:ex.aId,pos:ex.pos,sets:ex.sets,reps:ex.reps,weight:ex.weight,dur:ex.dur,dist:ex.dist,date:new Date().toISOString()};
     workoutLog = [entry, ...workoutLog];
     ignoreNext = 2;
     db.ref(UID+'/exercises').set(exercises);
     db.ref(UID+'/history').set(workoutLog);
+    renderEx();
+    return;
+  }
+
+  // Not last set — start rest countdown if restTime is set
+  if(restTime > 0){
+    ex.waitingSet = setIdx;
+    renderEx();
+    // Start countdown
+    let remaining = restTime;
+    updateCountdownBar(i, remaining, restTime);
+    if(countdownTimers[i]) clearInterval(countdownTimers[i]);
+    countdownTimers[i] = setInterval(()=>{
+      remaining--;
+      updateCountdownBar(i, remaining, restTime);
+      if(remaining <= 0){
+        clearInterval(countdownTimers[i]);
+        delete countdownTimers[i];
+        exercises[i].waitingSet = null;
+        ignoreNext = 1;
+        db.ref(UID+'/exercises').set(exercises);
+        renderEx();
+      }
+    }, 1000);
   } else {
     ignoreNext = 1;
     db.ref(UID+'/exercises').set(exercises);
+    renderEx();
   }
-  renderEx();
+}
+
+function updateCountdownBar(i, remaining, total){
+  const bar = document.getElementById('countdown-bar-'+i);
+  if(bar){
+    const pct = (remaining/total)*100;
+    bar.style.width = pct+'%';
+    const label = document.getElementById('countdown-label-'+i);
+    if(label) label.textContent = remaining+'שנ\'';
+  }
 }
 
 function delEx(i){
@@ -402,7 +463,7 @@ function openExModal(){
   editExIdx=null;
   document.getElementById('ex-modal-title').textContent='תרגיל חדש';
   document.getElementById('f-activity').innerHTML=types.map(t=>`<option value="${t.id}" ${t.id===selType?'selected':''}>${t.label}</option>`).join('');
-  ['f-name','f-sets','f-reps','f-weight','f-dur','f-dist'].forEach(id=>document.getElementById(id).value='');
+  ['f-name','f-sets','f-reps','f-weight','f-dur','f-dist','f-rest'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('ex-modal').classList.add('open');
 }
 window.openExModal=openExModal;
@@ -419,6 +480,7 @@ function openEditEx(i){
   document.getElementById('f-weight').value=ex.weight||'';
   document.getElementById('f-dur').value=ex.dur||'';
   document.getElementById('f-dist').value=ex.dist||'';
+  document.getElementById('f-rest').value=ex.rest||'';
   document.getElementById('ex-modal').classList.add('open');
 }
 window.openEditEx=openEditEx;
@@ -426,7 +488,7 @@ window.openEditEx=openEditEx;
 function saveExercise(){
   const name=document.getElementById('f-name').value.trim();
   if(!name){alert('נא להזין שם');return;}
-  const data={name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value};
+  const data={name,aId:document.getElementById('f-activity').value,pos:document.getElementById('f-pos').value,sets:document.getElementById('f-sets').value,reps:document.getElementById('f-reps').value,weight:document.getElementById('f-weight').value,dur:document.getElementById('f-dur').value,dist:document.getElementById('f-dist').value,rest:document.getElementById('f-rest').value||''};
   if(editExIdx!==null){exercises[editExIdx]={...exercises[editExIdx],...data};}
   else{exercises.push({...data,done:false});}
   saveAll();closeModal('ex-modal');renderEx();
@@ -540,6 +602,8 @@ function deleteHistory(i){
       const ex = exercises.find(e => e.name === deleted.name && e.aId === deleted.aId && e.done);
       if(ex) {
         ex.done = false;
+        ex.doneSets = 0;
+        ex.waitingSet = null;
         ignoreNext = 2;
         db.ref(UID+'/exercises').set(exercises);
       } else {
