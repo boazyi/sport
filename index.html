@@ -485,10 +485,27 @@ function renderHistory(){
 }
 function deleteHistory(i){
   if(confirm('למחוק את הפעילות מההיסטוריה?')){
+    const deleted = workoutLog[i];
     workoutLog.splice(i,1);
-    ignoreNext=1;
+    // Check if this was today - if so, unmark the exercise
+    const today = new Date().toDateString();
+    const deletedDay = new Date(deleted.date).toDateString();
+    if(deletedDay === today){
+      // Find matching exercise and unmark it
+      const ex = exercises.find(e => e.name === deleted.name && e.aId === deleted.aId && e.done);
+      if(ex) {
+        ex.done = false;
+        ignoreNext = 2;
+        db.ref(UID+'/exercises').set(exercises);
+      } else {
+        ignoreNext = 1;
+      }
+    } else {
+      ignoreNext = 1;
+    }
     db.ref(UID+'/history').set(workoutLog);
     renderHistory();
+    renderEx();
   }
 }
 
