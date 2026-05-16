@@ -212,7 +212,6 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
       <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">עד</label><input type="date" id="sa-to" onchange="renderStats()"/></div>
     </div>
     <div class="quick-btns" style="margin-bottom:12px">
-      <button class="quick-btn" onclick="setStatQuick('a','today')">היום</button>
       <button class="quick-btn" onclick="setStatQuick('a','week')">השבוע</button>
       <button class="quick-btn" onclick="setStatQuick('a','lastweek')">שבוע שעבר</button>
       <button class="quick-btn" onclick="setStatQuick('a','month')">החודש</button>
@@ -229,7 +228,6 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
       <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">עד</label><input type="date" id="sb-to" onchange="renderStats()"/></div>
     </div>
     <div class="quick-btns" style="margin-bottom:12px">
-      <button class="quick-btn" onclick="setStatQuick('b','today')">היום</button>
       <button class="quick-btn" onclick="setStatQuick('b','week')">השבוע</button>
       <button class="quick-btn" onclick="setStatQuick('b','lastweek')">שבוע שעבר</button>
       <button class="quick-btn" onclick="setStatQuick('b','month')">החודש</button>
