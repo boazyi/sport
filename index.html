@@ -714,6 +714,14 @@ function clearDateFilter(){
   renderHistory();
 }
 
+function toLocalDateStr(d){
+  // Format date as YYYY-MM-DD in local timezone (not UTC)
+  const y=d.getFullYear();
+  const m=String(d.getMonth()+1).padStart(2,'0');
+  const day=String(d.getDate()).padStart(2,'0');
+  return y+'-'+m+'-'+day;
+}
+
 function setQuickDate(q){
   const now=new Date();
   const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
@@ -743,9 +751,9 @@ function setQuickDate(q){
     dateTo=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
   }
 
-  // Update inputs to show selected range
-  if(dateFrom) document.getElementById('date-from').value=dateFrom.toISOString().split('T')[0];
-  if(dateTo) document.getElementById('date-to').value=dateTo.toISOString().split('T')[0];
+  // Use local date string (not UTC)
+  if(dateFrom) document.getElementById('date-from').value=toLocalDateStr(dateFrom);
+  if(dateTo) document.getElementById('date-to').value=toLocalDateStr(dateTo);
   renderHistory();
 }
 window.setHistFilter=setHistFilter;
