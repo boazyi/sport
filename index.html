@@ -112,6 +112,11 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 .empty{text-align:center;padding:48px 16px;color:var(--muted)}
 .empty-icon{font-size:40px;margin-bottom:12px}
 .empty-txt{font-size:14px;font-weight:600}
+.sets-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+.sets-label{font-size:12px;color:var(--muted);font-weight:600;margin-left:4px}
+.set-btn{width:36px;height:36px;border-radius:50%;border:2px solid var(--border);background:transparent;cursor:pointer;font-size:13px;font-weight:700;color:var(--muted);transition:all .2s;display:flex;align-items:center;justify-content:center}
+.set-btn.done{background:var(--teal);border-color:var(--teal);color:#fff}
+.set-btn:hover:not(.done){border-color:var(--teal);color:var(--teal)}
 .at-chip-wrap{display:flex;align-items:center;gap:4px}
 .at-chip-actions{display:flex;gap:2px;opacity:0;transition:opacity .2s}
 .at-chip-wrap:hover .at-chip-actions{opacity:1}
@@ -317,6 +322,17 @@ function renderEx(){
     if(ex.weight)meta.push(ex.weight+'ק"ג');
     if(ex.dur)meta.push(ex.dur+"'");
     if(ex.dist)meta.push(ex.dist+"מ'");
+    const totalSets = parseInt(ex.sets)||0;
+    const doneSets = ex.doneSets||0;
+    let bottomSection = '';
+    if(totalSets > 0 && !ex.done){
+      const setBtns = Array.from({length:totalSets},(_,s)=>
+        `<button class="set-btn ${s<doneSets?'done':''}" onclick="markSet(${ri},${s})">${s+1}</button>`
+      ).join('');
+      bottomSection = `<div class="sets-row"><span class="sets-label">סטים:</span>${setBtns}</div>`;
+    } else {
+      bottomSection = `<button class="done-btn ${ex.done?'done':''}" onclick="markDone(${ri})">${ex.done?'✓ בוצע היום!':'סמן כבוצע'}</button>`;
+    }
     return `<div class="ex-card">
       <div class="ex-top">
         <div><div class="ex-name">${ex.name}</div><span class="ex-badge ${getBadgeCls(at)}">${at?.label||''}</span></div>
@@ -326,7 +342,8 @@ function renderEx(){
         </div>
       </div>
       <div class="ex-meta">${meta.map(m=>`<span class="meta-pill">${m}</span>`).join('')}</div>
-      <button class="done-btn ${ex.done?'done':''}" onclick="markDone(${ri})">${ex.done?'✓ בוצע היום!':'סמן כבוצע'}</button>
+      ${totalSets>0&&!ex.done?`<div style="font-size:12px;color:var(--muted);margin-bottom:6px">${doneSets}/${totalSets} סטים בוצעו</div>`:''}
+      ${bottomSection}
     </div>`;
   }).join('');
 }
@@ -341,6 +358,34 @@ function markDone(i){
   ignoreNext = 2;
   db.ref(UID+'/exercises').set(exercises);
   db.ref(UID+'/history').set(workoutLog);
+  renderEx();
+}
+
+function markSet(i, setIdx){
+  const ex = exercises[i];
+  const totalSets = parseInt(ex.sets)||0;
+  const doneSets = ex.doneSets||0;
+
+  // Toggle: if clicking already-done set, undo from that set onward
+  if(setIdx < doneSets){
+    ex.doneSets = setIdx;
+  } else {
+    ex.doneSets = setIdx + 1;
+  }
+
+  // If all sets done → mark exercise as done
+  if(ex.doneSets >= totalSets){
+    ex.done = true;
+    ex.doneSets = totalSets;
+    const entry = {name:ex.name,aId:ex.aId,pos:ex.pos,sets:ex.sets,reps:ex.reps,weight:ex.weight,dur:ex.dur,dist:ex.dist,date:new Date().toISOString()};
+    workoutLog = [entry, ...workoutLog];
+    ignoreNext = 2;
+    db.ref(UID+'/exercises').set(exercises);
+    db.ref(UID+'/history').set(workoutLog);
+  } else {
+    ignoreNext = 1;
+    db.ref(UID+'/exercises').set(exercises);
+  }
   renderEx();
 }
 
