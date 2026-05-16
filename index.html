@@ -121,6 +121,12 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.6}}
 .countdown-bar{height:4px;border-radius:2px;background:var(--border);margin-bottom:10px;overflow:hidden}
 .countdown-bar-inner{height:100%;background:var(--red);border-radius:2px;transition:width 1s linear}
+.date-range-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px;padding:12px;background:var(--color-background-secondary,var(--bg));border-radius:var(--border-radius-md,10px);border:0.5px solid var(--border)}
+.date-range-row label{font-size:12px;font-weight:600;color:var(--muted)}
+.date-range-row input[type=date]{padding:6px 10px;border-radius:8px;border:1px solid var(--border);background:var(--card);color:var(--text);font-size:13px;font-family:inherit}
+.quick-btns{display:flex;gap:6px;flex-wrap:wrap}
+.quick-btn{padding:5px 12px;border-radius:14px;border:1px solid var(--border);font-size:12px;font-weight:600;cursor:pointer;background:transparent;color:var(--muted);transition:all .15s}
+.quick-btn:hover,.quick-btn.active{background:var(--blue-light);border-color:var(--blue);color:var(--blue)}
 .at-chip-wrap{display:flex;align-items:center;gap:4px}
 .at-chip-actions{display:flex;gap:2px;opacity:0;transition:opacity .2s}
 .at-chip-wrap:hover .at-chip-actions{opacity:1}
@@ -169,6 +175,25 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 
 <div class="content" style="display:none" id="panel-history">
   <div class="stats-grid" id="stats-grid"></div>
+  <div class="date-range-row">
+    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label>מתאריך</label>
+        <input type="date" id="date-from" onchange="applyDateFilter()"/>
+      </div>
+      <div style="display:flex;align-items:center;gap:6px">
+        <label>עד תאריך</label>
+        <input type="date" id="date-to" onchange="applyDateFilter()"/>
+      </div>
+      <button class="quick-btn" onclick="clearDateFilter()" id="btn-clear-date" style="display:none">✕ נקה</button>
+    </div>
+    <div class="quick-btns">
+      <button class="quick-btn" id="btn-today" onclick="setQuickDate('today')">היום</button>
+      <button class="quick-btn" id="btn-week" onclick="setQuickDate('week')">השבוע</button>
+      <button class="quick-btn" id="btn-lastweek" onclick="setQuickDate('lastweek')">שבוע שעבר</button>
+      <button class="quick-btn" id="btn-month" onclick="setQuickDate('month')">החודש</button>
+    </div>
+  </div>
   <div class="filter-row" id="hist-filters"></div>
   <div id="hist-list"></div>
 </div>
@@ -254,6 +279,9 @@ let exercises=[];
 let workoutLog=[];
 let selType=null;
 let histFilter='all';
+let dateFrom=null;
+let dateTo=null;
+let activeQuick=null;
 let deferredPrompt=null;
 let initialized=false;
 let ignoreNext=0;
@@ -564,7 +592,19 @@ function renderHistory(){
   document.getElementById('hist-filters').innerHTML=
     `<button class="fc ${histFilter==='all'?'active':''}" onclick="setHistFilter('all')">הכל</button>`+
     types.map(t=>`<button class="fc ${histFilter===t.id?'active':''}" onclick="setHistFilter('${t.id}')">${t.label}</button>`).join('');
-  const filtered=histFilter==='all'?workoutLog:workoutLog.filter(h=>h.aId===histFilter);
+  // Apply filters
+  let filtered = workoutLog.filter(h=>{
+    if(histFilter!=='all' && h.aId!==histFilter) return false;
+    if(dateFrom){
+      const d=new Date(h.date); d.setHours(0,0,0,0);
+      if(d < dateFrom) return false;
+    }
+    if(dateTo){
+      const d=new Date(h.date); d.setHours(23,59,59,999);
+      if(d > dateTo) return false;
+    }
+    return true;
+  });
   const listEl=document.getElementById('hist-list');
   if(!filtered.length){listEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">אין היסטוריה עדיין</div></div>';return;}
   listEl.innerHTML=filtered.map(h=>{
@@ -653,6 +693,61 @@ function saveHistoryEdit(){
 }
 
 function setHistFilter(f){histFilter=f;renderHistory();}
+
+function applyDateFilter(){
+  const fromVal=document.getElementById('date-from').value;
+  const toVal=document.getElementById('date-to').value;
+  dateFrom = fromVal ? new Date(fromVal) : null;
+  dateTo = toVal ? new Date(toVal) : null;
+  activeQuick = null;
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-clear-date').style.display=(dateFrom||dateTo)?'block':'none';
+  renderHistory();
+}
+
+function clearDateFilter(){
+  dateFrom=null; dateTo=null; activeQuick=null;
+  document.getElementById('date-from').value='';
+  document.getElementById('date-to').value='';
+  document.getElementById('btn-clear-date').style.display='none';
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  renderHistory();
+}
+
+function setQuickDate(q){
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  if(activeQuick===q){ clearDateFilter(); return; }
+  activeQuick=q;
+  document.querySelectorAll('.quick-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-'+q)?.classList.add('active');
+  document.getElementById('btn-clear-date').style.display='block';
+
+  if(q==='today'){
+    dateFrom=today;
+    dateTo=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='week'){
+    const day=today.getDay();
+    const sun=new Date(today); sun.setDate(today.getDate()-day);
+    dateFrom=sun;
+    dateTo=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='lastweek'){
+    const day=today.getDay();
+    const lastSun=new Date(today); lastSun.setDate(today.getDate()-day-7);
+    const lastSat=new Date(lastSun); lastSat.setDate(lastSun.getDate()+6);
+    lastSat.setHours(23,59,59,999);
+    dateFrom=lastSun;
+    dateTo=lastSat;
+  } else if(q==='month'){
+    dateFrom=new Date(today.getFullYear(),today.getMonth(),1);
+    dateTo=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  }
+
+  // Update inputs to show selected range
+  if(dateFrom) document.getElementById('date-from').value=dateFrom.toISOString().split('T')[0];
+  if(dateTo) document.getElementById('date-to').value=dateTo.toISOString().split('T')[0];
+  renderHistory();
+}
 window.setHistFilter=setHistFilter;
 window.renderHistory=renderHistory;
 
