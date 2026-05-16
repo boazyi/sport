@@ -176,25 +176,27 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 <div class="content" style="display:none" id="panel-history">
   <div class="stats-grid" id="stats-grid"></div>
   <div class="date-range-row">
-    <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1">
-      <div style="display:flex;align-items:center;gap:6px">
-        <label>מתאריך</label>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:4px">
+        <label>מ-</label>
         <input type="date" id="date-from" onchange="applyDateFilter()"/>
       </div>
-      <div style="display:flex;align-items:center;gap:6px">
-        <label>עד תאריך</label>
+      <div style="display:flex;align-items:center;gap:4px">
+        <label>עד</label>
         <input type="date" id="date-to" onchange="applyDateFilter()"/>
       </div>
+      <button class="quick-btn" id="btn-today" onclick="setQuickDate('today')">היום</button>
       <button class="quick-btn" onclick="clearDateFilter()" id="btn-clear-date" style="display:none">✕ נקה</button>
     </div>
     <div class="quick-btns">
-      <button class="quick-btn" id="btn-today" onclick="setQuickDate('today')">היום</button>
       <button class="quick-btn" id="btn-week" onclick="setQuickDate('week')">השבוע</button>
       <button class="quick-btn" id="btn-lastweek" onclick="setQuickDate('lastweek')">שבוע שעבר</button>
       <button class="quick-btn" id="btn-month" onclick="setQuickDate('month')">החודש</button>
+      <button class="quick-btn" id="btn-lastmonth" onclick="setQuickDate('lastmonth')">חודש שעבר</button>
     </div>
   </div>
   <div class="filter-row" id="hist-filters"></div>
+  <div id="hist-averages" style="display:none;margin-bottom:16px"></div>
   <div id="hist-list"></div>
 </div>
 
@@ -581,6 +583,12 @@ window.closeModal=closeModal;
 document.querySelectorAll('.overlay').forEach(o=>o.addEventListener('click',e=>{if(e.target===o)o.classList.remove('open');}));
 
 // ── History ───────────────────────────────────────────────
+function calcAvg(arr, key){
+  const vals=arr.map(h=>parseFloat(h[key])).filter(v=>!isNaN(v)&&v>0);
+  if(!vals.length) return null;
+  return (vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+}
+
 function renderHistory(){
   const total=workoutLog.length;
   const week=workoutLog.filter(h=>(new Date()-new Date(h.date))<7*864e5).length;
@@ -605,6 +613,33 @@ function renderHistory(){
     }
     return true;
   });
+  // Averages section
+  const avgEl=document.getElementById('hist-averages');
+  if(avgEl){
+    if(filtered.length>0){
+      const avgWeight=calcAvg(filtered,'weight');
+      const avgReps=calcAvg(filtered,'reps');
+      const avgSets=calcAvg(filtered,'sets');
+      const avgDur=calcAvg(filtered,'dur');
+      const avgDist=calcAvg(filtered,'dist');
+      const days=[...new Set(filtered.map(h=>new Date(h.date).toDateString()))].length;
+      const perDay=(filtered.length/days).toFixed(1);
+      let avgCards='';
+      avgCards+=`<div class="stat-card"><div class="stat-num">${filtered.length}</div><div class="stat-lbl">בתקופה זו</div></div>`;
+      avgCards+=`<div class="stat-card"><div class="stat-num">${days}</div><div class="stat-lbl">ימי אימון</div></div>`;
+      avgCards+=`<div class="stat-card"><div class="stat-num">${perDay}</div><div class="stat-lbl">תרגילים ליום</div></div>`;
+      if(avgWeight) avgCards+=`<div class="stat-card"><div class="stat-num">${avgWeight}</div><div class="stat-lbl">משקל ממוצע (ק"ג)</div></div>`;
+      if(avgReps) avgCards+=`<div class="stat-card"><div class="stat-num">${avgReps}</div><div class="stat-lbl">חזרות ממוצעות</div></div>`;
+      if(avgSets) avgCards+=`<div class="stat-card"><div class="stat-num">${avgSets}</div><div class="stat-lbl">סטים ממוצעים</div></div>`;
+      if(avgDur) avgCards+=`<div class="stat-card"><div class="stat-num">${avgDur}'</div><div class="stat-lbl">משך ממוצע</div></div>`;
+      if(avgDist) avgCards+=`<div class="stat-card"><div class="stat-num">${avgDist}</div><div class="stat-lbl">מרחק ממוצע (מ')</div></div>`;
+      avgEl.innerHTML='<div style="font-size:13px;font-weight:600;color:var(--muted);margin-bottom:8px">ממוצעים לתקופה</div><div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">'+avgCards+'</div>';
+      avgEl.style.display='block';
+    } else {
+      avgEl.style.display='none';
+    }
+  }
+
   const listEl=document.getElementById('hist-list');
   if(!filtered.length){listEl.innerHTML='<div class="empty"><div class="empty-icon">📋</div><div class="empty-txt">אין היסטוריה עדיין</div></div>';return;}
   listEl.innerHTML=filtered.map(h=>{
@@ -749,6 +784,9 @@ function setQuickDate(q){
   } else if(q==='month'){
     dateFrom=new Date(today.getFullYear(),today.getMonth(),1);
     dateTo=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='lastmonth'){
+    dateFrom=new Date(today.getFullYear(),today.getMonth()-1,1);
+    dateTo=new Date(today.getFullYear(),today.getMonth(),0,23,59,59);
   }
 
   // Use local date string (not UTC)
