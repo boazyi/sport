@@ -157,6 +157,7 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
 <div class="tabs">
   <div class="tab active" onclick="switchTab('exercises')">אימונים</div>
   <div class="tab" onclick="switchTab('history')">היסטוריה</div>
+  <div class="tab" onclick="switchTab('stats')">ממוצעים</div>
 </div>
 
 <div class="content" id="panel-exercises">
@@ -198,6 +199,50 @@ input:focus,select:focus{outline:none;border-color:var(--blue)}
   <div class="filter-row" id="hist-filters"></div>
   <div id="hist-averages" style="display:none;margin-bottom:16px"></div>
   <div id="hist-list"></div>
+</div>
+
+<div class="content" style="display:none" id="panel-stats">
+  <div class="section-title" style="margin-bottom:16px">השוואת תקופות</div>
+
+  <!-- Period A -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:700;color:var(--blue);margin-bottom:12px">📅 תקופה א'</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">מ-</label><input type="date" id="sa-from" onchange="renderStats()"/></div>
+      <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">עד</label><input type="date" id="sa-to" onchange="renderStats()"/></div>
+    </div>
+    <div class="quick-btns" style="margin-bottom:12px">
+      <button class="quick-btn" onclick="setStatQuick('a','today')">היום</button>
+      <button class="quick-btn" onclick="setStatQuick('a','week')">השבוע</button>
+      <button class="quick-btn" onclick="setStatQuick('a','lastweek')">שבוע שעבר</button>
+      <button class="quick-btn" onclick="setStatQuick('a','month')">החודש</button>
+      <button class="quick-btn" onclick="setStatQuick('a','lastmonth')">חודש שעבר</button>
+    </div>
+    <div id="stats-a-grid"></div>
+  </div>
+
+  <!-- Period B -->
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px">
+    <div style="font-size:14px;font-weight:700;color:var(--teal);margin-bottom:12px">📅 תקופה ב'</div>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">מ-</label><input type="date" id="sb-from" onchange="renderStats()"/></div>
+      <div style="display:flex;align-items:center;gap:4px"><label style="font-size:12px;font-weight:600;color:var(--muted)">עד</label><input type="date" id="sb-to" onchange="renderStats()"/></div>
+    </div>
+    <div class="quick-btns" style="margin-bottom:12px">
+      <button class="quick-btn" onclick="setStatQuick('b','today')">היום</button>
+      <button class="quick-btn" onclick="setStatQuick('b','week')">השבוע</button>
+      <button class="quick-btn" onclick="setStatQuick('b','lastweek')">שבוע שעבר</button>
+      <button class="quick-btn" onclick="setStatQuick('b','month')">החודש</button>
+      <button class="quick-btn" onclick="setStatQuick('b','lastmonth')">חודש שעבר</button>
+    </div>
+    <div id="stats-b-grid"></div>
+  </div>
+
+  <!-- Comparison -->
+  <div id="stats-compare" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:80px">
+    <div style="font-size:14px;font-weight:700;margin-bottom:12px">⚡ השוואה</div>
+    <div id="stats-compare-grid"></div>
+  </div>
 </div>
 
 <button class="fab" onclick="openExModal()">+ תרגיל חדש</button>
@@ -312,11 +357,13 @@ window.dismissInstall=dismissInstall;
 
 // ── Tabs ─────────────────────────────────────────────────
 function switchTab(tab){
-  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['exercises','history'][i]===tab));
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',['exercises','history','stats'][i]===tab));
   document.getElementById('panel-exercises').style.display=tab==='exercises'?'block':'none';
   document.getElementById('panel-history').style.display=tab==='history'?'block':'none';
+  document.getElementById('panel-stats').style.display=tab==='stats'?'block':'none';
   document.querySelector('.fab').style.display=tab==='exercises'?'block':'none';
   if(tab==='history') renderHistory();
+  if(tab==='stats') renderStats();
 }
 window.switchTab=switchTab;
 
@@ -804,6 +851,131 @@ function showStatus(msg, color='#0f6e56'){
 }
 
 // ── Init: load from Firebase with live sync ───────────────
+// ── Stats functions ───────────────────────────────────────
+function getStatQuickDates(q){
+  const now=new Date();
+  const today=new Date(now.getFullYear(),now.getMonth(),now.getDate());
+  let from,to;
+  if(q==='today'){
+    from=today; to=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='week'){
+    const day=today.getDay();
+    from=new Date(today); from.setDate(today.getDate()-day);
+    to=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='lastweek'){
+    const day=today.getDay();
+    from=new Date(today); from.setDate(today.getDate()-day-7);
+    to=new Date(from); to.setDate(from.getDate()+6); to.setHours(23,59,59,999);
+  } else if(q==='month'){
+    from=new Date(today.getFullYear(),today.getMonth(),1);
+    to=new Date(today.getFullYear(),today.getMonth(),today.getDate(),23,59,59);
+  } else if(q==='lastmonth'){
+    from=new Date(today.getFullYear(),today.getMonth()-1,1);
+    to=new Date(today.getFullYear(),today.getMonth(),0,23,59,59);
+  }
+  return {from,to};
+}
+
+function setStatQuick(period, q){
+  const {from,to}=getStatQuickDates(q);
+  document.getElementById('s'+period+'-from').value=toLocalDateStr(from);
+  document.getElementById('s'+period+'-to').value=toLocalDateStr(to);
+  // Highlight active button
+  const btns=document.querySelectorAll('#panel-stats .quick-btns .quick-btn');
+  // Update active state per period
+  renderStats();
+}
+
+function filterByDates(fromStr, toStr){
+  if(!fromStr && !toStr) return null;
+  const from = fromStr ? new Date(fromStr) : null;
+  const to = toStr ? new Date(toStr+'T23:59:59') : null;
+  return workoutLog.filter(h=>{
+    const d=new Date(h.date);
+    if(from && d < from) return false;
+    if(to && d > to) return false;
+    return true;
+  });
+}
+
+function buildStatsGrid(data, color){
+  if(!data || !data.length) return '<div style="font-size:13px;color:var(--muted);text-align:center;padding:12px">אין נתונים לתקופה זו</div>';
+  const days=[...new Set(data.map(h=>new Date(h.date).toDateString()))].length;
+  const perDay=(data.length/days).toFixed(1);
+  const avgWeight=calcAvg(data,'weight');
+  const avgReps=calcAvg(data,'reps');
+  const avgSets=calcAvg(data,'sets');
+  const avgDur=calcAvg(data,'dur');
+  const avgDist=calcAvg(data,'dist');
+  const uTypes=[...new Set(data.map(h=>h.aId))].length;
+  let cards=`
+    <div class="stat-card"><div class="stat-num" style="color:${color}">${data.length}</div><div class="stat-lbl">אימונים</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:${color}">${days}</div><div class="stat-lbl">ימי אימון</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:${color}">${perDay}</div><div class="stat-lbl">תרגילים/יום</div></div>`;
+  if(avgWeight) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgWeight}</div><div class="stat-lbl">משקל ממוצע</div></div>`;
+  if(avgReps) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgReps}</div><div class="stat-lbl">חזרות ממוצע</div></div>`;
+  if(avgSets) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgSets}</div><div class="stat-lbl">סטים ממוצע</div></div>`;
+  if(avgDur) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgDur}'</div><div class="stat-lbl">משך ממוצע</div></div>`;
+  if(avgDist) cards+=`<div class="stat-card"><div class="stat-num" style="color:${color}">${avgDist}</div><div class="stat-lbl">מרחק ממוצע</div></div>`;
+  return `<div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">${cards}</div>`;
+}
+
+function buildCompare(dataA, dataB){
+  if(!dataA || !dataA.length || !dataB || !dataB.length) return '';
+  const metrics=[
+    {key:'count', label:'אימונים', a:dataA.length, b:dataB.length, unit:''},
+    {key:'days', label:'ימי אימון', a:[...new Set(dataA.map(h=>new Date(h.date).toDateString()))].length, b:[...new Set(dataB.map(h=>new Date(h.date).toDateString()))].length, unit:''},
+    {key:'weight', label:'משקל ממוצע', a:parseFloat(calcAvg(dataA,'weight')), b:parseFloat(calcAvg(dataB,'weight')), unit:'ק"ג'},
+    {key:'reps', label:'חזרות ממוצע', a:parseFloat(calcAvg(dataA,'reps')), b:parseFloat(calcAvg(dataB,'reps')), unit:''},
+    {key:'sets', label:'סטים ממוצע', a:parseFloat(calcAvg(dataA,'sets')), b:parseFloat(calcAvg(dataB,'sets')), unit:''},
+    {key:'dur', label:'משך ממוצע', a:parseFloat(calcAvg(dataA,'dur')), b:parseFloat(calcAvg(dataB,'dur')), unit:"'"},
+    {key:'dist', label:'מרחק ממוצע', a:parseFloat(calcAvg(dataA,'dist')), b:parseFloat(calcAvg(dataB,'dist')), unit:"מ'"},
+  ].filter(m=>!isNaN(m.a)&&!isNaN(m.b)&&m.a>0&&m.b>0);
+
+  const rows=metrics.map(m=>{
+    const diff=m.b-m.a;
+    const pct=m.a>0?((diff/m.a)*100).toFixed(0):0;
+    const arrow=diff>0?'↑':diff<0?'↓':'=';
+    const color=diff>0?'var(--teal)':diff<0?'var(--red)':'var(--muted)';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:0.5px solid var(--border)">
+      <div style="font-size:13px;font-weight:600;min-width:100px">${m.label}</div>
+      <div style="font-size:13px;color:var(--blue)">${m.a}${m.unit}</div>
+      <div style="font-size:13px;color:var(--teal)">${m.b}${m.unit}</div>
+      <div style="font-size:13px;font-weight:700;color:${color};min-width:60px;text-align:center">${arrow} ${Math.abs(pct)}%</div>
+    </div>`;
+  }).join('');
+
+  return `<div style="display:flex;justify-content:space-between;padding:6px 0;margin-bottom:4px;border-bottom:1px solid var(--border)">
+    <div style="font-size:11px;font-weight:700;color:var(--muted)">מדד</div>
+    <div style="font-size:11px;font-weight:700;color:var(--blue)">תקופה א'</div>
+    <div style="font-size:11px;font-weight:700;color:var(--teal)">תקופה ב'</div>
+    <div style="font-size:11px;font-weight:700;color:var(--muted)">שינוי</div>
+  </div>${rows}`;
+}
+
+function renderStats(){
+  const fromA=document.getElementById('sa-from')?.value;
+  const toA=document.getElementById('sa-to')?.value;
+  const fromB=document.getElementById('sb-from')?.value;
+  const toB=document.getElementById('sb-to')?.value;
+
+  const dataA=filterByDates(fromA,toA);
+  const dataB=filterByDates(fromB,toB);
+
+  document.getElementById('stats-a-grid').innerHTML=dataA?buildStatsGrid(dataA,'var(--blue)'):'<div style="font-size:13px;color:var(--muted)">בחר תאריכים לתקופה א'</div>';
+  document.getElementById('stats-b-grid').innerHTML=dataB?buildStatsGrid(dataB,'var(--teal)'):'<div style="font-size:13px;color:var(--muted)">בחר תאריכים לתקופה ב'</div>';
+
+  const compareEl=document.getElementById('stats-compare');
+  if(dataA&&dataA.length&&dataB&&dataB.length){
+    document.getElementById('stats-compare-grid').innerHTML=buildCompare(dataA,dataB);
+    compareEl.style.display='block';
+  } else {
+    compareEl.style.display='none';
+  }
+}
+window.renderStats=renderStats;
+window.setStatQuick=setStatQuick;
+
 db.ref(UID).on('value', (snapshot) => {
   if(ignoreNext > 0){ ignoreNext--; return; }
   const data = snapshot.val();
