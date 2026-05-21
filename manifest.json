@@ -1,6 +1,6 @@
 {
   "name": "מאמן כושר",
-  "short_name": "כושר",
+  "short_name": "מאמן כושר",
   "description": "מעקב אימונים אישי",
   "start_url": "./",
   "display": "standalone",
